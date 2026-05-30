@@ -9,7 +9,7 @@ Usage:
   miso-init [OPTIONS] [DIR]
 
 Options:
-  -f, --force                 既存ファイル・既存の非空ディレクトリがあっても上書きして続行
+  -f, --force                 生成対象の既存ファイル・非空ディレクトリがあっても上書きして続行
       --miso-ref REF          cabal.project で使う miso の git 参照を指定
       --miso-version VERSION  miso の release tag と package version を指定
   -h, --help                  このヘルプを表示
@@ -207,7 +207,7 @@ if [ "$force" -ne 1 ]; then
   for path in "${conflicts[@]}"; do
     if check_conflict "$path"; then
       if [ "$found_conflict" -eq 0 ]; then
-        echo "error: existing non-empty paths found. Refusing to overwrite without --force:" >&2
+        echo "error: generated paths already exist. Refusing to overwrite without --force:" >&2
         found_conflict=1
       fi
       echo "  $path" >&2

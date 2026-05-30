@@ -146,7 +146,7 @@ teardown() {
   run "$MISO_INIT" "$target"
 
   assert_failure
-  assert_output_contains "error: existing non-empty paths found"
+  assert_output_contains "error: generated paths already exist"
   assert_output_contains "$target/app"
   assert_path_missing "$target/existing-app.cabal"
 }
@@ -159,9 +159,21 @@ teardown() {
   run "$MISO_INIT" "$target"
 
   assert_failure
-  assert_output_contains "error: existing non-empty paths found"
+  assert_output_contains "error: generated paths already exist"
   assert_output_contains "$target/other-app.cabal"
   assert_path_missing "$target/existing-app.cabal"
+}
+
+@test "existing unrelated files do not require --force" {
+  local target="$TEST_ROOT/existing-app"
+  mkdir -p "$target"
+  printf '# Existing docs\n' > "$target/README.md"
+
+  run "$MISO_INIT" "$target"
+
+  assert_success
+  assert_basic_project "$target" "existing-app"
+  assert_file_contains "$target/README.md" "# Existing docs"
 }
 
 @test "--force allows existing generated paths" {
