@@ -76,9 +76,10 @@ else
   mkdir -p "$target_dir"
 fi
 
-raw="${target_dir##*/}"
 if [ "$target_dir" = "." ]; then
   raw="$(basename "$PWD")"
+else
+  raw="$(basename "$target_dir")"
 fi
 
 pkg="$(
