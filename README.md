@@ -95,6 +95,9 @@ bin/serve.sh
 ポートを変える場合は、`PORT=8080 bin/serve.sh` または `bin/serve.sh --port 8080` を実行します。
 
 `bin/build-web.sh` は `public/` にブラウザ配信用ファイルを出力します。
+`public/` は完全な生成物ディレクトリなので、直接編集しないでください。
+画像や CSS など配信したい追加ファイルは `static/` に置くと、ビルド時に `public/` へコピーされます。
+既存の `public/` に miso-init の生成 marker がない場合、誤削除を避けるため `bin/build-web.sh` はエラーで停止します。
 
 ## 開発方針
 
