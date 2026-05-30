@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+
+miso_init_test_setup() {
+  export LC_ALL=C
+  export LANG=C
+
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  MISO_INIT="$REPO_ROOT/bin/miso-init"
+  TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/miso-init.bats.XXXXXX")"
+
+  export REPO_ROOT
+  export MISO_INIT
+  export TEST_ROOT
+}
+
+miso_init_test_teardown() {
+  if [ -n "${TEST_ROOT:-}" ] && [ -d "$TEST_ROOT" ]; then
+    rm -rf "$TEST_ROOT"
+  fi
+}
+
+assert_status() {
+  local expected="$1"
+
+  if [ "$status" -ne "$expected" ]; then
+    {
+      echo "expected status $expected, got $status"
+      echo
+      echo "$output"
+    } >&2
+    return 1
+  fi
+}
+
+assert_success() {
+  assert_status 0
+}
+
+assert_failure() {
+  if [ "$status" -eq 0 ]; then
+    {
+      echo "expected command to fail, got status 0"
+      echo
+      echo "$output"
+    } >&2
+    return 1
+  fi
+}
+
+assert_output_contains() {
+  local expected="$1"
+
+  if [[ "$output" != *"$expected"* ]]; then
+    {
+      echo "expected output to contain:"
+      echo "$expected"
+      echo
+      echo "actual output:"
+      echo "$output"
+    } >&2
+    return 1
+  fi
+}
+
+assert_file_exists() {
+  local path="$1"
+
+  if [ ! -f "$path" ]; then
+    echo "expected file to exist: $path" >&2
+    return 1
+  fi
+}
+
+assert_dir_exists() {
+  local path="$1"
+
+  if [ ! -d "$path" ]; then
+    echo "expected directory to exist: $path" >&2
+    return 1
+  fi
+}
+
+assert_executable() {
+  local path="$1"
+
+  if [ ! -x "$path" ]; then
+    echo "expected file to be executable: $path" >&2
+    return 1
+  fi
+}
+
+assert_file_contains() {
+  local path="$1"
+  local expected="$2"
+
+  assert_file_exists "$path" || return 1
+
+  if ! grep -Fq -- "$expected" "$path"; then
+    {
+      echo "expected file to contain: $expected"
+      echo "file: $path"
+    } >&2
+    return 1
+  fi
+}
+
+assert_path_missing() {
+  local path="$1"
+
+  if [ -e "$path" ]; then
+    echo "expected path to be absent: $path" >&2
+    return 1
+  fi
+}
+
+assert_basic_project() {
+  local dir="$1"
+  local package="$2"
+
+  assert_dir_exists "$dir/app"
+  assert_dir_exists "$dir/bin"
+  assert_dir_exists "$dir/static"
+
+  assert_file_exists "$dir/app/Main.hs"
+  assert_file_exists "$dir/bin/build-web.sh"
+  assert_file_exists "$dir/bin/serve.sh"
+  assert_file_exists "$dir/static/index.html"
+  assert_file_exists "$dir/static/index.js"
+  assert_file_exists "$dir/cabal.project"
+  assert_file_exists "$dir/$package.cabal"
+  assert_file_exists "$dir/.gitignore"
+
+  assert_executable "$dir/bin/build-web.sh"
+  assert_executable "$dir/bin/serve.sh"
+
+  assert_file_contains "$dir/$package.cabal" "name: $package"
+  assert_file_contains "$dir/$package.cabal" "executable app"
+  assert_file_contains "$dir/app/Main.hs" "Hello, miso"
+  assert_file_contains "$dir/static/index.html" '<script src="./index.js" type="module"></script>'
+  assert_file_contains "$dir/static/index.js" 'await instance.exports.hs_start();'
+  assert_file_contains "$dir/bin/build-web.sh" "wasm32-wasi-cabal build"
+  assert_file_contains "$dir/bin/serve.sh" "python3 -m http.server 8000 -d public"
+  assert_file_contains "$dir/.gitignore" "dist-newstyle/"
+  assert_file_contains "$dir/.gitignore" "public/"
+}
