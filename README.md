@@ -29,6 +29,14 @@ ln -s "$PWD/bin/miso-init" /usr/local/bin/miso-init
 source ~/.ghc-wasm/env
 ```
 
+有効化できているかは、次のコマンドで確認できます。
+
+```sh
+command -v wasm32-wasi-cabal
+command -v wasm32-wasi-ghc
+wasm32-wasi-ghc --version
+```
+
 ## 使い方
 
 新しいディレクトリに生成する場合:
@@ -104,6 +112,25 @@ bin/serve.sh
 `public/` は完全な生成物ディレクトリなので、直接編集しないでください。
 画像や CSS など配信したい追加ファイルは `static/` に置くと、ビルド時に `public/` へコピーされます。
 既存の `public/` に miso-init の生成 marker がない場合、誤削除を避けるため `bin/build-web.sh` はエラーで停止します。
+
+## 開発時の確認
+
+通常の変更では `make check` を通します。
+
+```sh
+make check
+```
+
+`make check` は Bash の構文チェックと Bats テストを実行しますが、実際の `ghc-wasm` ビルドは含みません。
+
+生成されるプロジェクト、`bin/build-web.sh`、`cabal.project`、miso 依存指定に関わる変更では、`ghc-wasm` ツールチェーンを有効化して `make smoke` も通します。
+
+```sh
+source ~/.ghc-wasm/env
+make smoke
+```
+
+`make smoke` は一時ディレクトリに生成したアプリを実際の `ghc-wasm` ツールチェーンでビルドし、`public/` 配下のブラウザ配信用ファイル生成まで確認します。
 
 ## 開発方針
 
