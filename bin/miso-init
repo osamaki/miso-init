@@ -196,7 +196,7 @@ conflicts=(
   "$target_dir/app"
   "$target_dir/static"
   "$target_dir/cabal.project"
-  "$target_dir/$pkg.cabal"
+  "$target_dir"/*.cabal
   "$target_dir/bin/build-web.sh"
   "$target_dir/bin/serve.sh"
   "$target_dir/.gitignore"

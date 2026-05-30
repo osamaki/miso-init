@@ -151,6 +151,19 @@ teardown() {
   assert_path_missing "$target/existing-app.cabal"
 }
 
+@test "existing cabal files with different names fail without --force" {
+  local target="$TEST_ROOT/existing-app"
+  mkdir -p "$target"
+  printf 'name: other-app\n' > "$target/other-app.cabal"
+
+  run "$MISO_INIT" "$target"
+
+  assert_failure
+  assert_output_contains "error: existing non-empty paths found"
+  assert_output_contains "$target/other-app.cabal"
+  assert_path_missing "$target/existing-app.cabal"
+}
+
 @test "--force allows existing generated paths" {
   local target="$TEST_ROOT/existing-app"
   mkdir -p "$target/app"
