@@ -277,6 +277,7 @@ JS
 cat > "$target_dir/bin/build-web.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
 command -v wasm32-wasi-cabal >/dev/null 2>&1 || {
   echo "wasm32-wasi-cabal が見つかりません。先に source ~/.ghc-wasm/env を実行してください。" >&2
@@ -313,6 +314,7 @@ SH
 cat > "$target_dir/bin/serve.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 python3 -m http.server 8000 -d public
 SH
 

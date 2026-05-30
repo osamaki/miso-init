@@ -141,3 +141,121 @@ teardown() {
   assert_output_contains "wasm32-wasi-cabal"
   assert_output_contains "source ~/.ghc-wasm/env"
 }
+
+@test "generated build script can be run from outside the project root" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  local other="$TEST_ROOT/elsewhere"
+
+  run "$MISO_INIT" "$target"
+  assert_success
+
+  mkdir -p "$tools/lib" "$other"
+
+  cat > "$tools/wasm32-wasi-cabal" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  build)
+    test -f cabal.project
+    test -d static
+    mkdir -p dist-newstyle/bin
+    printf '%s\n' wasm > dist-newstyle/bin/app.wasm
+    ;;
+  list-bin)
+    test "${2:-}" = "exe:app"
+    printf '%s\n' "$PWD/dist-newstyle/bin/app.wasm"
+    ;;
+  *)
+    echo "unexpected wasm32-wasi-cabal args: $*" >&2
+    exit 1
+    ;;
+esac
+SH
+
+  cat > "$tools/wasm32-wasi-ghc" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_dir="$(cd "$(dirname "$0")" && pwd)"
+
+if [ "${1:-}" = "--print-libdir" ]; then
+  printf '%s\n' "$tool_dir/lib"
+else
+  echo "unexpected wasm32-wasi-ghc args: $*" >&2
+  exit 1
+fi
+SH
+
+  cat > "$tools/lib/post-link.mjs" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+input=""
+output=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --input)
+      input="$2"
+      shift 2
+      ;;
+    --output)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      echo "unexpected post-link args: $*" >&2
+      exit 1
+      ;;
+  esac
+done
+
+test -f "$input"
+printf '%s\n' jsffi > "$output"
+SH
+
+  chmod +x "$tools/wasm32-wasi-cabal" "$tools/wasm32-wasi-ghc" "$tools/lib/post-link.mjs"
+
+  cd "$other"
+  run env PATH="$tools:/usr/bin:/bin" "$target/bin/build-web.sh"
+
+  assert_success
+  assert_file_exists "$target/public/index.html"
+  assert_file_exists "$target/public/index.js"
+  assert_file_exists "$target/public/ghc_wasm_jsffi.js"
+  assert_file_exists "$target/public/app.wasm"
+  assert_path_missing "$other/public"
+}
+
+@test "generated serve script serves from the project root" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  local other="$TEST_ROOT/elsewhere"
+  local log="$TEST_ROOT/serve.log"
+  local expected_root
+
+  run "$MISO_INIT" "$target"
+  assert_success
+
+  mkdir -p "$tools" "$other"
+  expected_root="$(cd "$target" && pwd)"
+
+  cat > "$tools/python3" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$PWD" > "$SERVE_LOG"
+printf '%s\n' "$*" >> "$SERVE_LOG"
+SH
+
+  chmod +x "$tools/python3"
+
+  cd "$other"
+  run env PATH="$tools:/usr/bin:/bin" SERVE_LOG="$log" "$target/bin/serve.sh"
+
+  assert_success
+  assert_file_contains "$log" "$expected_root"
+  assert_file_contains "$log" "-m http.server 8000 -d public"
+}

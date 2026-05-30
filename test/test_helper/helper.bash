@@ -138,7 +138,9 @@ assert_basic_project() {
   assert_file_contains "$dir/app/Main.hs" "Hello, miso"
   assert_file_contains "$dir/static/index.html" '<script src="./index.js" type="module"></script>'
   assert_file_contains "$dir/static/index.js" 'await instance.exports.hs_start();'
+  assert_file_contains "$dir/bin/build-web.sh" 'cd "$(dirname "$0")/.."'
   assert_file_contains "$dir/bin/build-web.sh" "wasm32-wasi-cabal build"
+  assert_file_contains "$dir/bin/serve.sh" 'cd "$(dirname "$0")/.."'
   assert_file_contains "$dir/bin/serve.sh" "python3 -m http.server 8000 -d public"
   assert_file_contains "$dir/.gitignore" "dist-newstyle/"
   assert_file_contains "$dir/.gitignore" "public/"
