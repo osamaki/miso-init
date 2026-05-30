@@ -84,6 +84,7 @@ bin/serve.sh
 ```
 
 その後、ブラウザで `http://localhost:8000` を開きます。
+ポートを変える場合は、`PORT=8080 bin/serve.sh` または `bin/serve.sh --port 8080` を実行します。
 
 `bin/build-web.sh` は `public/` にブラウザ配信用ファイルを出力します。
 

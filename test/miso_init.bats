@@ -259,3 +259,33 @@ SH
   assert_file_contains "$log" "$expected_root"
   assert_file_contains "$log" "-m http.server 8000 -d public"
 }
+
+@test "generated serve script accepts PORT and --port" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  local log="$TEST_ROOT/serve.log"
+
+  run "$MISO_INIT" "$target"
+  assert_success
+
+  mkdir -p "$tools"
+
+  cat > "$tools/python3" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" > "$SERVE_LOG"
+SH
+
+  chmod +x "$tools/python3"
+
+  run env PATH="$tools:/usr/bin:/bin" PORT=8080 SERVE_LOG="$log" "$target/bin/serve.sh"
+
+  assert_success
+  assert_file_contains "$log" "-m http.server 8080 -d public"
+
+  run env PATH="$tools:/usr/bin:/bin" PORT=8080 SERVE_LOG="$log" "$target/bin/serve.sh" --port 9090
+
+  assert_success
+  assert_file_contains "$log" "-m http.server 9090 -d public"
+}

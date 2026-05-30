@@ -141,7 +141,9 @@ assert_basic_project() {
   assert_file_contains "$dir/bin/build-web.sh" 'cd "$(dirname "$0")/.."'
   assert_file_contains "$dir/bin/build-web.sh" "wasm32-wasi-cabal build"
   assert_file_contains "$dir/bin/serve.sh" 'cd "$(dirname "$0")/.."'
-  assert_file_contains "$dir/bin/serve.sh" "python3 -m http.server 8000 -d public"
+  assert_file_contains "$dir/bin/serve.sh" 'port="${PORT:-8000}"'
+  assert_file_contains "$dir/bin/serve.sh" "--port"
+  assert_file_contains "$dir/bin/serve.sh" 'python3 -m http.server "$port" -d public'
   assert_file_contains "$dir/.gitignore" "dist-newstyle/"
   assert_file_contains "$dir/.gitignore" "public/"
 }

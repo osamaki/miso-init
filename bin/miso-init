@@ -315,7 +315,35 @@ cat > "$target_dir/bin/serve.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-python3 -m http.server 8000 -d public
+
+port="${PORT:-8000}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --port)
+      if [ "$#" -lt 2 ]; then
+        echo "error: --port requires a value" >&2
+        exit 1
+      fi
+      port="$2"
+      shift 2
+      ;;
+    --port=*)
+      port="${1#--port=}"
+      if [ -z "$port" ]; then
+        echo "error: --port requires a value" >&2
+        exit 1
+      fi
+      shift
+      ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+python3 -m http.server "$port" -d public
 SH
 
 cat > "$target_dir/.gitignore" <<'GITIGNORE'
