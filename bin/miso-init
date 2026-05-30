@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+show_help() {
+  cat <<'HELP'
+Initialize a miso app for the WebAssembly backend using the non-Nix ghc-wasm bootstrap toolchain.
+
+Usage:
+  miso-init [OPTIONS] [DIR]
+
+Options:
+  -f, --force   既存ファイル・既存の非空ディレクトリがあっても上書きして続行
+  -h, --help    このヘルプを表示
+
+Behavior:
+  - DIR を指定した場合:
+      そのディレクトリを作成して、そこへ miso wasm プロジェクトを生成します
+  - DIR を省略した場合:
+      カレントディレクトリに生成します
+
+Examples:
+  miso-init hello-miso
+  mkdir hello-miso && cd hello-miso && miso-init
+  miso-init --force
+HELP
+}
+
+force=0
+target_dir=""
+positional_count=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -f|--force)
+      force=1
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      echo >&2
+      show_help >&2
+      exit 1
+      ;;
+    *)
+      positional_count=$((positional_count + 1))
+      if [ "$positional_count" -gt 1 ]; then
+        echo "error: too many arguments" >&2
+        echo >&2
+        show_help >&2
+        exit 1
+      fi
+      target_dir="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ "$#" -gt 0 ]; then
+  echo "error: too many arguments" >&2
+  echo >&2
+  show_help >&2
+  exit 1
+fi
+
+if [ -z "$target_dir" ]; then
+  target_dir="."
+else
+  mkdir -p "$target_dir"
+fi
+
+raw="${target_dir##*/}"
+if [ "$target_dir" = "." ]; then
+  raw="$(basename "$PWD")"
+fi
+
+pkg="$(
+  printf '%s' "$raw" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9-]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+)"
+
+if [ -z "$pkg" ]; then
+  pkg="miso-app"
+fi
+
+check_conflict() {
+  path="$1"
+
+  if [ ! -e "$path" ]; then
+    return 1
+  fi
+
+  if [ -d "$path" ]; then
+    if [ -z "$(find "$path" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+      return 1
+    fi
+    return 0
+  fi
+
+  return 0
+}
+
+conflicts=(
+  "$target_dir/app"
+  "$target_dir/static"
+  "$target_dir/cabal.project"
+  "$target_dir/$pkg.cabal"
+  "$target_dir/bin/build-web.sh"
+  "$target_dir/bin/serve.sh"
+  "$target_dir/.gitignore"
+)
+
+if [ "$force" -ne 1 ]; then
+  found_conflict=0
+  for path in "${conflicts[@]}"; do
+    if check_conflict "$path"; then
+      if [ "$found_conflict" -eq 0 ]; then
+        echo "error: existing non-empty paths found. Refusing to overwrite without --force:" >&2
+        found_conflict=1
+      fi
+      echo "  $path" >&2
+    fi
+  done
+
+  if [ "$found_conflict" -eq 1 ]; then
+    exit 1
+  fi
+fi
+
+mkdir -p "$target_dir/app" "$target_dir/bin" "$target_dir/static"
+
+cat > "$target_dir/cabal.project" <<'CABAL_PROJECT'
+packages: .
+
+allow-newer: all:base
+
+source-repository-package
+  type: git
+  location: https://github.com/dmjio/miso
+  tag: master
+  flags: +template-haskell
+CABAL_PROJECT
+
+cat > "$target_dir/$pkg.cabal" <<CABAL
+cabal-version: 3.0
+name: $pkg
+version: 0.1.0.0
+build-type: Simple
+
+common warnings
+  ghc-options:
+    -Wall
+    -O2
+    -ferror-spans
+
+common wasm
+  if arch(wasm32)
+    ghc-options:
+      -no-hs-main
+      -optl-mexec-model=reactor
+      "-optl-Wl,--export=hs_start"
+    cpp-options:
+      -DWASM
+
+executable app
+  import: warnings, wasm
+  main-is: Main.hs
+  hs-source-dirs: app
+  build-depends:
+      base < 5
+    , miso >= 1.9
+  default-language: Haskell2010
+CABAL
+
+cat > "$target_dir/app/Main.hs" <<'HS'
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+module Main where
+
+import Miso
+import Miso.Html.Element as H
+import Miso.Html.Event as E
+import Miso.Lens
+import Miso.String (ms)
+
+data Action
+  = Increment
+  | Decrement
+  deriving (Show, Eq)
+
+#ifdef WASM
+foreign export javascript "hs_start" main :: IO ()
+#endif
+
+main :: IO ()
+main = startApp defaultEvents app
+
+app :: App Int Action
+app = component 0 updateModel viewModel
+
+updateModel :: Action -> Effect parent Int Action
+updateModel = \case
+  Increment -> this += 1
+  Decrement -> this -= 1
+
+viewModel :: Int -> View Int Action
+viewModel n =
+  H.div_ []
+    [ H.h1_ [] [ text "Hello, miso" ]
+    , H.div_ [] [ text (ms (show n)) ]
+    , H.div_ []
+        [ H.button_ [ E.onClick Decrement ] [ text "-" ]
+        , H.button_ [ E.onClick Increment ] [ text "+" ]
+        ]
+    ]
+HS
+
+cat > "$target_dir/static/index.html" <<'HTML'
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>miso app</title>
+  </head>
+  <body>
+    <script src="./index.js" type="module"></script>
+  </body>
+</html>
+HTML
+
+cat > "$target_dir/static/index.js" <<'JS'
+import { WASI, OpenFile, File, ConsoleStdout } from "https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim@0.3.0/dist/index.js";
+import ghc_wasm_jsffi from "./ghc_wasm_jsffi.js";
+
+const args = [];
+const env = ["GHCRTS=-H64m"];
+const fds = [
+  new OpenFile(new File([])),
+  ConsoleStdout.lineBuffered((msg) => console.log(`[WASI stdout] ${msg}`)),
+  ConsoleStdout.lineBuffered((msg) => console.warn(`[WASI stderr] ${msg}`)),
+];
+const wasi = new WASI(args, env, fds, { debug: false });
+
+const instance_exports = {};
+
+const { instance } = await WebAssembly.instantiateStreaming(fetch("./app.wasm"), {
+  wasi_snapshot_preview1: wasi.wasiImport,
+  ghc_wasm_jsffi: ghc_wasm_jsffi(instance_exports),
+});
+
+Object.assign(instance_exports, instance.exports);
+wasi.initialize(instance);
+
+await instance.exports.hs_start();
+JS
+
+cat > "$target_dir/bin/build-web.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v wasm32-wasi-cabal >/dev/null 2>&1 || {
+  echo "wasm32-wasi-cabal が見つかりません。先に source ~/.ghc-wasm/env を実行してください。" >&2
+  exit 1
+}
+command -v wasm32-wasi-ghc >/dev/null 2>&1 || {
+  echo "wasm32-wasi-ghc が見つかりません。先に source ~/.ghc-wasm/env を実行してください。" >&2
+  exit 1
+}
+
+wasm32-wasi-cabal build
+
+wasm_path="$(wasm32-wasi-cabal list-bin exe:app | tail -n 1)"
+libdir="$(wasm32-wasi-ghc --print-libdir)"
+
+rm -rf public
+mkdir -p public
+cp -r static/. public/
+
+"$libdir/post-link.mjs" \
+  --input "$wasm_path" \
+  --output public/ghc_wasm_jsffi.js
+
+cp "$wasm_path" public/app.wasm
+
+echo
+echo "Built:"
+echo "  public/index.html"
+echo "  public/index.js"
+echo "  public/ghc_wasm_jsffi.js"
+echo "  public/app.wasm"
+SH
+
+cat > "$target_dir/bin/serve.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+python3 -m http.server 8000 -d public
+SH
+
+cat > "$target_dir/.gitignore" <<'GITIGNORE'
+dist-newstyle/
+public/
+GITIGNORE
+
+chmod +x "$target_dir/bin/build-web.sh" "$target_dir/bin/serve.sh"
+
+echo "Created project in $target_dir"
+echo "Package name: $pkg"
+echo "Next:"
+echo "  source ~/.ghc-wasm/env"
+echo "  bin/build-web.sh"
+echo "  bin/serve.sh"
