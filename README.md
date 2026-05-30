@@ -8,6 +8,7 @@
 
 - `miso` の最小構成アプリを生成する
 - `wasm32-wasi-cabal` でビルドできる `cabal.project` と `.cabal` を生成する
+- `--miso-ref` / `--miso-version` で利用する miso の参照を選べる
 - ブラウザ実行に必要な `static/index.html` と `static/index.js` を生成する
 - `bin/build-web.sh` と `bin/serve.sh` を生成する
 
@@ -48,6 +49,13 @@ miso-init
 
 ```sh
 miso-init --force
+```
+
+miso の release tag / git 参照を指定する場合:
+
+```sh
+miso-init --miso-version 1.11.0 hello-miso
+miso-init --miso-ref 2853fb4f26175f51ae7b9aaf0ec683c45070d06e hello-miso
 ```
 
 詳細:

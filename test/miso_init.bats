@@ -22,6 +22,8 @@ teardown() {
   assert_success
   assert_output_contains "Usage:"
   assert_output_contains "miso-init [OPTIONS] [DIR]"
+  assert_output_contains "--miso-ref REF"
+  assert_output_contains "--miso-version VERSION"
 }
 
 @test "unknown option fails with a helpful message" {
@@ -62,6 +64,48 @@ teardown() {
   assert_output_contains "Created project in ."
   assert_output_contains "Package name: current-app"
   assert_basic_project "$target" "current-app"
+}
+
+@test "--miso-ref sets the generated miso git reference" {
+  local target="$TEST_ROOT/hello-miso"
+  local ref="2853fb4f26175f51ae7b9aaf0ec683c45070d06e"
+
+  run "$MISO_INIT" --miso-ref "$ref" "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: $ref"
+  assert_file_contains "$target/cabal.project" "tag: $ref"
+  assert_file_contains "$target/hello-miso.cabal" "miso >= 1.9"
+}
+
+@test "--miso-version pins the generated release tag and dependency version" {
+  local target="$TEST_ROOT/hello-miso"
+
+  run "$MISO_INIT" --miso-version=1.11.0 "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: 1.11.0"
+  assert_file_contains "$target/cabal.project" "tag: 1.11.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0"
+}
+
+@test "miso reference options reject invalid input" {
+  local target="$TEST_ROOT/hello-miso"
+
+  run "$MISO_INIT" --miso-ref
+
+  assert_failure
+  assert_output_contains "error: --miso-ref requires a value"
+
+  run "$MISO_INIT" --miso-version v1.11.0 "$target"
+
+  assert_failure
+  assert_output_contains "error: --miso-version must look like 1.11.0"
+
+  run "$MISO_INIT" --miso-ref master --miso-version 1.11.0 "$target"
+
+  assert_failure
+  assert_output_contains "error: --miso-ref and --miso-version cannot be used together"
 }
 
 @test "normalizes directory names into valid cabal package names" {

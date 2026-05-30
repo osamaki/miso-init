@@ -9,8 +9,10 @@ Usage:
   miso-init [OPTIONS] [DIR]
 
 Options:
-  -f, --force   既存ファイル・既存の非空ディレクトリがあっても上書きして続行
-  -h, --help    このヘルプを表示
+  -f, --force                 既存ファイル・既存の非空ディレクトリがあっても上書きして続行
+      --miso-ref REF          cabal.project で使う miso の git 参照を指定
+      --miso-version VERSION  miso の release tag と package version を指定
+  -h, --help                  このヘルプを表示
 
 Behavior:
   - DIR を指定した場合:
@@ -20,6 +22,8 @@ Behavior:
 
 Examples:
   miso-init hello-miso
+  miso-init --miso-version 1.11.0 hello-miso
+  miso-init --miso-ref 2853fb4f26175f51ae7b9aaf0ec683c45070d06e hello-miso
   mkdir hello-miso && cd hello-miso && miso-init
   miso-init --force
 HELP
@@ -28,17 +32,72 @@ HELP
 force=0
 target_dir=""
 positional_count=0
+miso_ref="master"
+miso_version=""
+miso_ref_option=""
+
+usage_error() {
+  echo "error: $1" >&2
+  echo >&2
+  show_help >&2
+  exit 1
+}
 
 set_target_dir() {
   positional_count=$((positional_count + 1))
   if [ "$positional_count" -gt 1 ]; then
-    echo "error: too many arguments" >&2
-    echo >&2
-    show_help >&2
-    exit 1
+    usage_error "too many arguments"
   fi
 
   target_dir="$1"
+}
+
+validate_miso_ref() {
+  option="$1"
+  value="$2"
+
+  if [ -z "$value" ]; then
+    usage_error "$option requires a value"
+  fi
+
+  case "$value" in
+    -*)
+      usage_error "$option requires a non-option value"
+      ;;
+    *[[:space:]]*)
+      usage_error "$option value must not contain whitespace"
+      ;;
+  esac
+}
+
+set_miso_ref() {
+  value="$1"
+  validate_miso_ref "--miso-ref" "$value"
+
+  if [ "$miso_ref_option" = "version" ]; then
+    usage_error "--miso-ref and --miso-version cannot be used together"
+  fi
+
+  miso_ref="$value"
+  miso_version=""
+  miso_ref_option="ref"
+}
+
+set_miso_version() {
+  value="$1"
+  validate_miso_ref "--miso-version" "$value"
+
+  if [[ ! "$value" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    usage_error "--miso-version must look like 1.11.0"
+  fi
+
+  if [ "$miso_ref_option" = "ref" ]; then
+    usage_error "--miso-ref and --miso-version cannot be used together"
+  fi
+
+  miso_ref="$value"
+  miso_version="$value"
+  miso_ref_option="version"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -51,6 +110,28 @@ while [ "$#" -gt 0 ]; do
       force=1
       shift
       ;;
+    --miso-ref)
+      if [ "$#" -lt 2 ]; then
+        usage_error "--miso-ref requires a value"
+      fi
+      set_miso_ref "$2"
+      shift 2
+      ;;
+    --miso-ref=*)
+      set_miso_ref "${1#--miso-ref=}"
+      shift
+      ;;
+    --miso-version)
+      if [ "$#" -lt 2 ]; then
+        usage_error "--miso-version requires a value"
+      fi
+      set_miso_version "$2"
+      shift 2
+      ;;
+    --miso-version=*)
+      set_miso_version "${1#--miso-version=}"
+      shift
+      ;;
     --)
       shift
       while [ "$#" -gt 0 ]; do
@@ -59,10 +140,7 @@ while [ "$#" -gt 0 ]; do
       done
       ;;
     -*)
-      echo "error: unknown option: $1" >&2
-      echo >&2
-      show_help >&2
-      exit 1
+      usage_error "unknown option: $1"
       ;;
     *)
       set_target_dir "$1"
@@ -72,10 +150,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$#" -gt 0 ]; then
-  echo "error: too many arguments" >&2
-  echo >&2
-  show_help >&2
-  exit 1
+  usage_error "too many arguments"
 fi
 
 if [ -z "$target_dir" ]; then
@@ -146,7 +221,12 @@ fi
 
 mkdir -p "$target_dir/app" "$target_dir/bin" "$target_dir/static"
 
-cat > "$target_dir/cabal.project" <<'CABAL_PROJECT'
+miso_constraint="miso >= 1.9"
+if [ -n "$miso_version" ]; then
+  miso_constraint="miso == $miso_version"
+fi
+
+cat > "$target_dir/cabal.project" <<CABAL_PROJECT
 packages: .
 
 allow-newer: all:base
@@ -154,7 +234,7 @@ allow-newer: all:base
 source-repository-package
   type: git
   location: https://github.com/dmjio/miso
-  tag: master
+  tag: $miso_ref
   flags: +template-haskell
 CABAL_PROJECT
 
@@ -185,7 +265,7 @@ executable app
   hs-source-dirs: app
   build-depends:
       base < 5
-    , miso >= 1.9
+    , $miso_constraint
   default-language: Haskell2010
 CABAL
 
@@ -355,6 +435,7 @@ chmod +x "$target_dir/bin/build-web.sh" "$target_dir/bin/serve.sh"
 
 echo "Created project in $target_dir"
 echo "Package name: $pkg"
+echo "Miso ref: $miso_ref"
 echo "Next:"
 echo "  source ~/.ghc-wasm/env"
 echo "  bin/build-web.sh"
