@@ -12,6 +12,7 @@ Options:
   -f, --force                 生成対象の既存ファイル・非空ディレクトリがあっても上書きして続行
       --miso-ref REF          cabal.project で使う miso の git 参照を指定
       --miso-version VERSION  miso の release tag と package version を指定
+                              1.11 のように patch version を省略した場合は最新の 1.11.x を解決
   -h, --help                  このヘルプを表示
 
 Behavior:
@@ -22,6 +23,7 @@ Behavior:
 
 Examples:
   miso-init hello-miso
+  miso-init --miso-version 1.11 hello-miso
   miso-init --miso-version 1.11.0 hello-miso
   miso-init --miso-ref 2853fb4f26175f51ae7b9aaf0ec683c45070d06e hello-miso
   mkdir hello-miso && cd hello-miso && miso-init
@@ -32,9 +34,12 @@ HELP
 force=0
 target_dir=""
 positional_count=0
-miso_ref="master"
-miso_version=""
+default_miso_version="1.11.0"
+miso_ref="$default_miso_version"
+miso_version="$default_miso_version"
 miso_ref_option=""
+needs_miso_version_resolution=0
+miso_version_input=""
 
 usage_error() {
   echo "error: $1" >&2
@@ -81,14 +86,16 @@ set_miso_ref() {
   miso_ref="$value"
   miso_version=""
   miso_ref_option="ref"
+  needs_miso_version_resolution=0
+  miso_version_input=""
 }
 
 set_miso_version() {
   value="$1"
   validate_miso_ref "--miso-version" "$value"
 
-  if [[ ! "$value" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-    usage_error "--miso-version must look like 1.11.0"
+  if [[ ! "$value" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
+    usage_error "--miso-version must look like 1.11 or 1.11.0"
   fi
 
   if [ "$miso_ref_option" = "ref" ]; then
@@ -98,6 +105,55 @@ set_miso_version() {
   miso_ref="$value"
   miso_version="$value"
   miso_ref_option="version"
+
+  case "$value" in
+    *.*.*)
+      needs_miso_version_resolution=0
+      miso_version_input=""
+      ;;
+    *)
+      needs_miso_version_resolution=1
+      miso_version_input="$value"
+      ;;
+  esac
+}
+
+resolve_miso_version() {
+  version_prefix="$1"
+  tag_prefix="$version_prefix."
+  case "$version_prefix" in
+    *.*)
+      suggested_version="$version_prefix.0"
+      ;;
+    *)
+      suggested_version="$version_prefix.0.0"
+      ;;
+  esac
+
+  command -v git >/dev/null 2>&1 || {
+    echo "error: --miso-version $version_prefix requires git to resolve the latest ${version_prefix}.x release." >&2
+    echo "Specify a full version such as --miso-version $suggested_version to work offline." >&2
+    exit 1
+  }
+
+  latest="$(
+    git ls-remote --tags --refs https://github.com/dmjio/miso.git 2>/dev/null \
+      | awk '{ print $2 }' \
+      | sed 's#^refs/tags/##' \
+      | grep -E "^${tag_prefix//./\\.}[0-9]+(\\.[0-9]+)*$" \
+      | sort -t . -k1,1n -k2,2n -k3,3n -k4,4n \
+      | tail -n 1
+  )" || true
+
+  if [ -z "$latest" ]; then
+    echo "error: could not resolve the latest miso $version_prefix release." >&2
+    echo "Network access to GitHub may be unavailable, or no ${version_prefix}.x tag exists." >&2
+    echo "Specify a full version such as --miso-version $suggested_version to work offline." >&2
+    exit 1
+  fi
+
+  miso_ref="$latest"
+  miso_version="$latest"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -217,6 +273,10 @@ if [ "$force" -ne 1 ]; then
   if [ "$found_conflict" -eq 1 ]; then
     exit 1
   fi
+fi
+
+if [ "$needs_miso_version_resolution" -eq 1 ]; then
+  resolve_miso_version "$miso_version_input"
 fi
 
 mkdir -p "$target_dir/app" "$target_dir/bin" "$target_dir/static"

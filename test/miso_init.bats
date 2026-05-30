@@ -89,6 +89,117 @@ teardown() {
   assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0"
 }
 
+@test "--miso-version with a full version does not require network resolution" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  mkdir -p "$tools"
+
+  cat > "$tools/git" <<'SH'
+#!/usr/bin/env bash
+exit 128
+SH
+
+  chmod +x "$tools/git"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1.11.0 "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: 1.11.0"
+  assert_file_contains "$target/cabal.project" "tag: 1.11.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0"
+}
+
+@test "--miso-version resolves omitted patch versions to the latest matching release tag" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  mkdir -p "$tools"
+
+  cat > "$tools/git" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$1" != "ls-remote" ]; then
+  echo "unexpected git args: $*" >&2
+  exit 1
+fi
+
+cat <<'OUT'
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refs/tags/1.10.9
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	refs/tags/1.11.0
+cccccccccccccccccccccccccccccccccccccccc	refs/tags/1.11.2
+dddddddddddddddddddddddddddddddddddddddd	refs/tags/2.0.0
+OUT
+SH
+
+  chmod +x "$tools/git"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1.11 "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: 1.11.2"
+  assert_file_contains "$target/cabal.project" "tag: 1.11.2"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.2"
+}
+
+@test "--miso-version resolves omitted minor and patch versions to the latest matching release tag" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  mkdir -p "$tools"
+
+  cat > "$tools/git" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$1" != "ls-remote" ]; then
+  echo "unexpected git args: $*" >&2
+  exit 1
+fi
+
+cat <<'OUT'
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refs/tags/1.10.9
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	refs/tags/1.11.2
+cccccccccccccccccccccccccccccccccccccccc	refs/tags/1.12.0
+dddddddddddddddddddddddddddddddddddddddd	refs/tags/2.0.0
+OUT
+SH
+
+  chmod +x "$tools/git"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1 "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: 1.12.0"
+  assert_file_contains "$target/cabal.project" "tag: 1.12.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.12.0"
+}
+
+@test "--miso-version reports offline resolution failures and suggests a full version" {
+  local target="$TEST_ROOT/hello-miso"
+  local major_target="$TEST_ROOT/major-miso"
+  local tools="$TEST_ROOT/tools"
+  mkdir -p "$tools"
+
+  cat > "$tools/git" <<'SH'
+#!/usr/bin/env bash
+exit 128
+SH
+
+  chmod +x "$tools/git"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1.11 "$target"
+
+  assert_failure
+  assert_output_contains "error: could not resolve the latest miso 1.11 release."
+  assert_output_contains "Specify a full version such as --miso-version 1.11.0 to work offline."
+  assert_path_missing "$target/cabal.project"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1 "$major_target"
+
+  assert_failure
+  assert_output_contains "Specify a full version such as --miso-version 1.0.0 to work offline."
+  assert_path_missing "$major_target/cabal.project"
+}
+
 @test "miso reference options reject invalid input" {
   local target="$TEST_ROOT/hello-miso"
 
@@ -100,7 +211,7 @@ teardown() {
   run "$MISO_INIT" --miso-version v1.11.0 "$target"
 
   assert_failure
-  assert_output_contains "error: --miso-version must look like 1.11.0"
+  assert_output_contains "error: --miso-version must look like 1.11 or 1.11.0"
 
   run "$MISO_INIT" --miso-ref master --miso-version 1.11.0 "$target"
 

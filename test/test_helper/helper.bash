@@ -135,9 +135,9 @@ assert_basic_project() {
 
   assert_file_contains "$dir/$package.cabal" "name: $package"
   assert_file_contains "$dir/$package.cabal" "executable app"
-  assert_file_contains "$dir/$package.cabal" "miso >= 1.9"
+  assert_file_contains "$dir/$package.cabal" "miso == 1.11.0"
   assert_file_contains "$dir/app/Main.hs" "Hello, miso"
-  assert_file_contains "$dir/cabal.project" "tag: master"
+  assert_file_contains "$dir/cabal.project" "tag: 1.11.0"
   assert_file_contains "$dir/static/index.html" '<script src="./index.js" type="module"></script>'
   assert_file_contains "$dir/static/index.js" 'await instance.exports.hs_start();'
   assert_file_contains "$dir/bin/build-web.sh" 'cd "$(dirname "$0")/.."'
