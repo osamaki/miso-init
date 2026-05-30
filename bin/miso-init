@@ -372,7 +372,6 @@ import Miso
 import Miso.Html.Element as H
 import Miso.Html.Event as E
 import Miso.Lens
-import Miso.String (ms)
 
 data Action
   = Increment
@@ -387,15 +386,15 @@ main :: IO ()
 main = startApp defaultEvents app
 
 app :: App Int Action
-app = component 0 updateModel viewModel
+app = vcomp 0 updateModel viewModel
 
-updateModel :: Action -> Effect parent Int Action
+updateModel :: Action -> Effect parent props Int Action
 updateModel = \case
   Increment -> this += 1
   Decrement -> this -= 1
 
-viewModel :: Int -> View Int Action
-viewModel n =
+viewModel :: () -> Int -> View Int Action
+viewModel _ n =
   H.div_ []
     [ H.h1_ [] [ text "Hello, miso" ]
     , H.div_ [] [ text (ms (show n)) ]
