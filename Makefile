@@ -7,11 +7,15 @@ BATS ?=
 BREW ?=
 BATS_FORMULA ?= bats
 TEST_DIR ?= test
+SMOKE_MISO_REF ?=
+SMOKE_MISO_VERSION ?=
+SMOKE_ROOT ?=
+SMOKE_KEEP ?= 0
 
 FIND_BATS = if [ -n "$(BATS)" ]; then printf '%s\n' "$(BATS)"; elif command -v bats >/dev/null 2>&1; then command -v bats; fi
 FIND_BREW = if [ -n "$(BREW)" ]; then printf '%s\n' "$(BREW)"; elif command -v brew >/dev/null 2>&1; then command -v brew; elif [ -x /opt/homebrew/bin/brew ]; then printf '%s\n' /opt/homebrew/bin/brew; elif [ -x /usr/local/bin/brew ]; then printf '%s\n' /usr/local/bin/brew; fi
 
-.PHONY: help setup-test check-bats syntax test check
+.PHONY: help setup-test check-bats syntax test check smoke
 
 help:
 	@printf '%s\n' 'Targets:'
@@ -20,6 +24,7 @@ help:
 	@printf '%s\n' '  make syntax      Run bash syntax checks'
 	@printf '%s\n' '  make test        Run the bats test suite'
 	@printf '%s\n' '  make check       Run syntax checks and tests'
+	@printf '%s\n' '  make smoke       Build a generated app with the real ghc-wasm toolchain'
 
 setup-test:
 	@bats_bin="$$( $(FIND_BATS) )"; \
@@ -46,10 +51,18 @@ check-bats:
 	"$$bats_bin" --version
 
 syntax:
-	env LC_ALL=C LANG=C bash -n bin/miso-init
+	env LC_ALL=C LANG=C bash -n bin/miso-init test/smoke-build.sh
 
 test: check-bats
 	@bats_bin="$$( $(FIND_BATS) )"; \
 	env LC_ALL=C LANG=C "$$bats_bin" "$(TEST_DIR)"
 
 check: syntax test
+
+smoke:
+	@env LC_ALL=C LANG=C \
+	  SMOKE_MISO_REF="$(SMOKE_MISO_REF)" \
+	  SMOKE_MISO_VERSION="$(SMOKE_MISO_VERSION)" \
+	  SMOKE_ROOT="$(SMOKE_ROOT)" \
+	  SMOKE_KEEP="$(SMOKE_KEEP)" \
+	  test/smoke-build.sh

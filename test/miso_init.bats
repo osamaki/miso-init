@@ -86,7 +86,7 @@ teardown() {
   assert_success
   assert_output_contains "Miso ref: 1.11.0"
   assert_file_contains "$target/cabal.project" "tag: 1.11.0"
-  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0.0"
 }
 
 @test "--miso-version with a full version does not require network resolution" {
@@ -106,7 +106,27 @@ SH
   assert_success
   assert_output_contains "Miso ref: 1.11.0"
   assert_file_contains "$target/cabal.project" "tag: 1.11.0"
-  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0.0"
+}
+
+@test "--miso-version accepts the four-component cabal package version" {
+  local target="$TEST_ROOT/hello-miso"
+  local tools="$TEST_ROOT/tools"
+  mkdir -p "$tools"
+
+  cat > "$tools/git" <<'SH'
+#!/usr/bin/env bash
+exit 128
+SH
+
+  chmod +x "$tools/git"
+
+  run env PATH="$tools:/usr/bin:/bin" "$MISO_INIT" --miso-version 1.11.0.0 "$target"
+
+  assert_success
+  assert_output_contains "Miso ref: 1.11.0"
+  assert_file_contains "$target/cabal.project" "tag: 1.11.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.0.0"
 }
 
 @test "--miso-version resolves omitted patch versions to the latest matching release tag" {
@@ -138,7 +158,7 @@ SH
   assert_success
   assert_output_contains "Miso ref: 1.11.2"
   assert_file_contains "$target/cabal.project" "tag: 1.11.2"
-  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.2"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.11.2.0"
 }
 
 @test "--miso-version resolves omitted minor and patch versions to the latest matching release tag" {
@@ -170,7 +190,7 @@ SH
   assert_success
   assert_output_contains "Miso ref: 1.12.0"
   assert_file_contains "$target/cabal.project" "tag: 1.12.0"
-  assert_file_contains "$target/hello-miso.cabal" "miso == 1.12.0"
+  assert_file_contains "$target/hello-miso.cabal" "miso == 1.12.0.0"
 }
 
 @test "--miso-version reports offline resolution failures and suggests a full version" {
@@ -211,7 +231,7 @@ SH
   run "$MISO_INIT" --miso-version v1.11.0 "$target"
 
   assert_failure
-  assert_output_contains "error: --miso-version must look like 1.11 or 1.11.0"
+  assert_output_contains "error: --miso-version must look like 1, 1.11, 1.11.0, or 1.11.0.0"
 
   run "$MISO_INIT" --miso-ref master --miso-version 1.11.0 "$target"
 
